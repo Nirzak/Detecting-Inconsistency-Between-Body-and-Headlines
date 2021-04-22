@@ -121,6 +121,7 @@ def _create_tensor_dataset(data, max_headline_len, max_para_len, max_num_para):
         # label
         labels.append(int(d[2]))
     print(count_no_body)
+    print(len(headline_tensors))
 
     return TensorDataset(torch.stack(headline_tensors), 
                          torch.tensor(headline_lengths, dtype=torch.int), 

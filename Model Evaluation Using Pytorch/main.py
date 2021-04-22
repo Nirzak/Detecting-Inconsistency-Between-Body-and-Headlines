@@ -52,19 +52,23 @@ def evaluate(model, data):
         loss = loss_sum / num_total
         acc = num_correct / num_total
         auc = roc_auc_score(labels_all.tolist(), preds_all.tolist())
+        #try:
+        #    auc = roc_auc_score(labels_all.tolist(), preds_all.tolist())
+        #except ValueError:
+        #    pass
 
         return loss, acc, auc
 
 
-def train(model, train_data, args): #val_data excluded
+def train(model, train_data, val_data, args): #val_data excluded
     model.train()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.BCEWithLogitsLoss()
 
     num_iterations_per_epoch = len(train_data) / args.batch_size
-    #val_eval_freq = int(args.val_evaluation_freq * num_iterations_per_epoch)
-    #print(f"Val set evaluated every {val_eval_freq:,} steps (approx. {args.val_evaluation_freq} epoch)")
+    val_eval_freq = int(args.val_evaluation_freq * num_iterations_per_epoch)
+    print(f"Val set evaluated every {val_eval_freq:,} steps (approx. {args.val_evaluation_freq} epoch)")
 
     es = utils.EarlyStopping(args.early_stopping_patience)
     initial_time = time.time()
@@ -90,26 +94,26 @@ def train(model, train_data, args): #val_data excluded
             
             global_step += 1
 
-#            if global_step % val_eval_freq == 0: #excluded val_eval_freq==0
-#                # Evaluate on validation set
-#                val_loss, val_acc, val_auc = evaluate(model, val_data)
-#                model.train()
+            if global_step % val_eval_freq == 0:
+                # Evaluate on validation set
+                val_loss, val_acc, val_auc = evaluate(model, val_data)
+                model.train()
 
-#                end_time = time.time()
-#                minutes_elapsed = int((end_time - initial_time)/60)
-#                print("STEP: {:7} | TIME: {:4}min | VAL LOSS: {:.4f} | VAL ACC: {:.4f} | VAL AUROC: {:.4f}".format(
-#                    global_step, minutes_elapsed, val_loss, val_acc, val_auc
-#                ))
+                end_time = time.time()
+                minutes_elapsed = int((end_time - initial_time)/60)
+                print("STEP: {:7} | TIME: {:4}min | VAL LOSS: {:.4f} | VAL ACC: {:.4f} | VAL AUROC: {:.4f}".format(
+                    global_step, minutes_elapsed, val_loss, val_acc, val_auc
+                ))
 
                 # Check early stopping
-#                if global_step >= args.min_iterations:
-#                    es.record_loss(val_loss, model)
+                if global_step >= args.min_iterations:
+                    es.record_loss(val_loss, model)
 
-#                if es.should_stop():
-#                    print(f"Early stopping at STEP: {global_step}...")
-#                    return
+                if es.should_stop():
+                    print(f"Early stopping at STEP: {global_step}...")
+                    return
 
-            if global_step == 4: #excluding args.max_iterations
+            if global_step == args.max_iterations: #excluding args.max_iterations
                 print(f"Stopping after reaching max iterations({global_step})...")
                 return
         epoch_no += 1
@@ -153,11 +157,11 @@ def main():
                                       args.max_para_len, args.max_num_para, args.cache_dataset, 
                                       args.cache_dir)
     print(f"Train dataset size: {len(train_dataset):9,}")
-    #print("Loading dev dataset...")
-    #val_dataset = data.load_dataset(args.data_dir, 'dev', args.max_headline_len,
-    #                               args.max_para_len, args.max_num_para, args.cache_dataset,
-    #                                args.cache_dir)
-    #print(f"test dev size: {len(val_dataset):9,}")
+    print("Loading dev dataset...")
+    val_dataset = data.load_dataset(args.data_dir, 'dev', args.max_headline_len,
+                                   args.max_para_len, args.max_num_para, args.cache_dataset,
+                                    args.cache_dir)
+    print(f"test dev size: {len(val_dataset):9,}")
 
     glove_embeds = data.load_glove(args.data_dir)
 
@@ -170,13 +174,12 @@ def main():
         'word': args.word_level_rnn_hidden_dim,
         'paragraph': args.word_level_rnn_hidden_dim
     }
-    model = AttnHrDualEncoderModel(hidden_dims, vocab_size, embedding_dim, 
-                                   pretrained_embeds=glove_embeds)
+    model = AttnHrDualEncoderModel(hidden_dims, vocab_size, embedding_dim, pretrained_embeds=glove_embeds)
     model.to(device)
     print("Initialization done!")
 
     # Train
-    train(model, train_dataset, args) #val_dataset excluded
+    train(model, train_dataset, val_dataset,  args)
 
     # Evaluate test
     if args.evaluate_test_after_train:
